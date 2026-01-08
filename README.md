@@ -36,7 +36,7 @@ For more information about DAConv and DSConv , please refer to the following pap
   **Note:** The ATM22 and AIIB23 datasets need to be registered on the challenge website and an application submitted to organizers with official email address. The validation set can be submitted online to obtain the evaluation results, while the test set needs to be submitted to the official party. The test is conducted through Docker and the evaluation feedback is combined. For more information, please visit the challenge website.
 
 
-## Predict
+## Prediction
 Our trained model can be downloaded from [here](https://drive.google.com/file/d/1DEKyAMhV90AL80qoy2QgDxmO0F1cXx1r/view?usp=drive_link)
 
 
@@ -70,7 +70,7 @@ predict.sh # The default is the trained weights obtained through ATM22.
 
 **Note:** Must set your input folder before prediction in evaluation.py(data_path = "/your/inputs"), Finished prediction results will be stored in the ./predict_result/outputs folder.
 
-## train
+## training
 
 The data structure we expect is as follows：
 
