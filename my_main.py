@@ -193,6 +193,19 @@ def main():
 	v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = 0, 0, 0, 0, 0
 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = 0, 0, 0, 0, 0
 
+	logName = os.path.join(logdirpath, 'log.csv')
+
+	# check if log already exists
+	if not os.path.exists(logName):
+		# only write header if file is being created
+		with open(logName, 'a') as csvout:
+			writer = csv.writer(csvout)
+			row = ['train epoch', 'train loss', 'val loss', 'test loss', 'train accuracy', 'val accuracy', 'test accuracy',
+					'train sensitivity', 'val sensitivity', 'test sensitivity', 'DSC train', 'DSC val', 'DSC test',
+					'precision train','precision val', 'precision test']
+			writer.writerow(row)
+			csvout.close()
+
 	for epoch in range(start_epoch, end_epoch + 1):
 		# 更新大小气道的采样频率
 		t_loss, mean_accuracy, mean_sensitivity, mean_DSC, mean_precision = train_casenet(epoch, net, train_loader, optimizer, args, save_dir)
@@ -252,23 +265,15 @@ def main():
 							  train_precision, val_precision, test_precision])
 		np.save(os.path.join(logdirpath, 'log.npy'), totalinfo)
 
-	logName = os.path.join(logdirpath, 'log.csv')
-
-	with open(logName, 'a') as csvout:
-		writer = csv.writer(csvout)
-		row =['train epoch', 'train loss', 'val loss', 'test loss', 'train accuracy', 'val accuracy', 'test accuracy',
-	 		   'train sensitivity', 'val sensitivity', 'test sensitivity', 'DSC train', 'DSC val', 'DSC test',
-	 		   'precision train','precision val', 'precision test']
-		writer.writerow(row)
-
-		for i in range(len(total_epoch)):
-			row = [total_epoch[i], train_loss[i], val_loss[i], test_loss[i], 
-				   train_accuracy[i], val_accuracy[i], test_accuracy[i],
-				   train_sensitivity[i], val_sensitivity[i], test_sensitivity[i], 
-				   train_DSC[i], val_DSC[i], test_DSC[i],
-				   train_precision[i], val_precision[i], test_precision[i]]
+		with open(logName, 'a') as csvout:
+			writer = csv.writer(csvout)
+			row = [epoch, t_loss, v_loss, te_loss, 
+				mean_accuracy, mean_acc2, mean_acc3,
+				mean_sensitivity, mean_sensiti2, mean_sensiti3, 
+				mean_DSC, mean_dice2, mean_dice3,
+				mean_precision, mean_ppv2, mean_ppv3]
 			writer.writerow(row)
-		csvout.close()
+			csvout.close()
 
 	print("Done")
 	return
