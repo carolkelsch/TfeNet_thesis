@@ -97,11 +97,21 @@ def get_cubic_bbox(mask, margin=5):
 	# Calculate current widths
 	y_width = y2 - y1
 	x_width = x2 - x1
+	z_width = z2 - z1
 
 	# Find the largest side to make it square
 	max_side = max(y_width, x_width)
 	if max_side < 128:
 		max_side = 128
+	
+	if z_width < 128:
+		# check if image size is greather than 128
+		if mask.shape[0] >= 128:
+			z_center = (z1 + z2) // 2
+			z1 = max(0, z_center - 128 // 2)
+			z2 = min(mask.shape[0], z1 + 128)
+		else:
+			return None
 
 	# Center the square crop
 	y_center = (y1 + y2) // 2

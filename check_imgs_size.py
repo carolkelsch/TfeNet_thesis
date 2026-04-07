@@ -25,8 +25,8 @@ def check_image_dimensions(folder_path):
             
             # 3. Get the size (SimpleITK uses Width, Height, Depth order)
             size = image.GetSize()
-            
-            print(f"{file_name:<30} | {str(size):<30}")
+            if min(size) < 128:
+                print(f"{file_name:<30} | {str(size):<30}")
             
         except Exception as e:
             print(f"Could not read {file_name}: {e}")
