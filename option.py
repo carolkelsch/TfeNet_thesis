@@ -48,5 +48,8 @@ parser.add_argument('--multigpu', default=False, type=bool, metavar='mgpu',
 					help='use multiple gpus')
 parser.add_argument('--device', default=0, type=int, metavar='device',
 					help='cuda device number')
-
+parser.add_argument('--small_airways', default=False, action='store_true',
+					help='if set, will train network on small airways (only inside the lungs)')
+parser.add_argument('--dataset_path', default='/home/carolinakelsch/Documents/ThesisDatasets/TfeNet_datasets/Dataset012_CompleteAirways', type=str,
+					help='path to the dataset folder')
 

@@ -4,6 +4,7 @@ import os
 import skimage.measure as measure
 from scipy import ndimage
 import json
+import argparse
 
 EPSILON = 1e-32
 def compute_binary_iou(y_true, y_pred):
@@ -14,6 +15,10 @@ def compute_binary_iou(y_true, y_pred):
 
 def large_connected_domain(label, conn=1):
     cd, num = measure.label(label, return_num=True, connectivity=conn)
+    print(f"Found {num} structures")
+    if num <= 0:
+        print("Did not found structures, so no postprocessing done")
+        return label
     volume = np.zeros([num])
     for k in range(num):
         volume[k] = ((cd == (k + 1)).astype(np.uint8)).sum()
@@ -32,7 +37,7 @@ def large_connected_domain(label, conn=1):
     #     flag -= 1
     #     iou = compute_binary_iou(label, large_cd)
 
-    return large_cd.astype('float')
+    return large_cd.astype(np.uint8)
 
 def postprocess(root, save_root): 
     print("postprocess begin")
@@ -118,20 +123,15 @@ def merge_multi_result(folder_names, save_folder):
 
 
 if __name__ == '__main__':
-    postprocess(r'./predict_result/concat', r'./predict_result/outputs')
+    parser = argparse.ArgumentParser(
+        prog='Evaluate generated model on validation',
+        description='This code predicts the segmeentation for the validation set with TfeNet',
+        epilog='Get started!'
+    )
+    parser.add_argument('-pred_concat', '--pred_concat_folder', type=str, required=True, help="Folder path to the predicted concatenated images")
+    parser.add_argument('-s', '--saving_folder', type=str, required=True, help="Path to save the outputs")
 
+    args = parser.parse_args()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    print(args)
+    postprocess(args.pred_concat_folder, args.saving_folder)

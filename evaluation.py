@@ -1,22 +1,20 @@
 import os
-import time
 import numpy as np
 from importlib import import_module
 import torch
 from torch.utils.data import DataLoader
 from data_ATM22 import SegValData
-import skimage.measure as measure
-from skimage.morphology import skeletonize_3d
-from utils import load_itk_image,save_itk
-import tqdm
+from utils import save_itk
+import argparse
 
-def network_prediction(data_path, save_path,ifsmall=False):
+def network_prediction(data_path, save_path, ckpt_path, ifsmall=False):
     casemodel = import_module('TfeNet')
     config2, case_net = casemodel.get_model()
+    
     if ifsmall:
-        checkpoint = torch.load('./checkpoint/ATM22/TfeNetSmall_checkpoint.ckpt')
-    else:
-        checkpoint = torch.load('./checkpoint/ATM22/TfeNet_checkpoint.ckpt')
+        assert 'small' in ckpt_path.lower(), "It seems the ckpt path is not for the small airways"
+    
+    checkpoint = torch.load(ckpt_path)
     case_net.load_state_dict(checkpoint['state_dict'])
     val_path = data_path
     dataset = SegValData(val_path)
@@ -32,7 +30,6 @@ def network_prediction(data_path, save_path,ifsmall=False):
         print(case_name)
         pred = np.zeros(x.shape)
         pred_num = np.zeros(x.shape)
-        # print(x.shape)
         x = x.cuda()
         xnum = (x.shape[2] - cube_size) // step + 1 if (x.shape[2] - cube_size) % step == 0 else \
             (x.shape[2] - cube_size) // step + 2
@@ -60,6 +57,10 @@ def network_prediction(data_path, save_path,ifsmall=False):
                         zl = x.shape[4] - cube_size
 
                     x_input = x[:, :, xl:xr, yl:yr, zl:zr]
+                    # Debugging check
+                    if x_input.shape[2:] != (cube_size, cube_size, cube_size):
+                        print(f"Warning: Unexpected input shape: {x_input.shape}\nSkipping input...")
+                        continue
                     p = case_net(x_input.contiguous())
                     p = p.cpu().detach().numpy()
                     pred[:, :, xl:xr, yl:yr, zl:zr] += p
@@ -71,21 +72,28 @@ def network_prediction(data_path, save_path,ifsmall=False):
         pred = np.squeeze(pred)
 
         print(os.path.join(save_path,case_name))
-        save_itk(pred,origin[0],spacing[0],os.path.join(save_path,case_name))
+        save_itk(pred.astype(np.uint8), origin[0], spacing[0], os.path.join(save_path, case_name))
 
 if __name__ == '__main__':
-    # data_path = "/your/inputs"
-    data_path = "/home/wqb/wqb/dataset/BAS/image_clean/train"
+    parser = argparse.ArgumentParser(
+        prog='Evaluate generated model on validation',
+        description='This code predicts the segmeentation for the validation set with TfeNet',
+        epilog='Get started!'
+    )
+    parser.add_argument('-f', '--folder', type=str, required=True, help="Folder path to the validation set")
+    parser.add_argument('-df', '--destination_folder', type=str, required=True, help="Folder path to save the validation predictions")
+    parser.add_argument('-m', '--model_ckpt', type=str, required=True, help="Path to the models checkpoints")
+    parser.add_argument('-s', '--small', action='store_true', default=False, required=False, help="If the checkpoint is for the small airways")
+
+    args = parser.parse_args()
+
+    print(args)
+
+    '''data_path = "/home/wqb/wqb/dataset/BAS/image_clean/train"
     small_save_path = "./predict_result/pred_small"
-    save_path = "./predict_result/pred"
-
-    # data_path = "/home/wqb/wqb/ATM_docker_inputs"
-    # small_save_path = "/home/wqb/wqb/ATM_docker_outputs/small"
-    # save_path = "/home/wqb/wqb/ATM_docker_outputs/norm"
-
+    save_path = "./predict_result/pred"'''
     
-    network_prediction(data_path, small_save_path, ifsmall=True)
-    network_prediction(data_path, save_path, ifsmall=False)
+    network_prediction(args.folder, args.destination_folder, args.model_ckpt, ifsmall=args.small)
     
 
 
