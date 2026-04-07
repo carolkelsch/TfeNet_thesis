@@ -1,40 +1,8 @@
-import SimpleITK as sitk
 import numpy as np
 import argparse
 import os
 from tqdm import tqdm
 import shutil
-
-def get_standardized_volume(file_path):
-    image = sitk.ReadImage(file_path)
-    standard_img = sitk.DICOMOrient(image, 'RPS')
-    
-    return standard_img
-
-def resample_data(image_file, new_spacing=[1.0, 1.0, 1.0]):
-    
-    image = get_standardized_volume(image_file)
-    
-    original_spacing = image.GetSpacing()
-    if original_spacing != new_spacing:
-        # resample image to normalized dimensions
-        original_size = image.GetSize()
-
-        new_size = [
-            int(round(osz * ospc / nspc))
-            for osz, ospc, nspc in zip(original_size, original_spacing, new_spacing)
-        ]
-
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetOutputSpacing(new_spacing)
-        resampler.SetSize(new_size)
-        resampler.SetOutputDirection(image.GetDirection())
-        resampler.SetOutputOrigin(image.GetOrigin())
-        resampler.SetInterpolator(sitk.sitkNearestNeighbor)
-        
-        image = resampler.Execute(image)
-    
-    return image
 
 if __name__ == '__main__':
 
