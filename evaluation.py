@@ -7,9 +7,9 @@ from data_ATM22 import SegValData
 from utils import save_itk
 import argparse
 
-def network_prediction(data_path, save_path, ckpt_path, ifsmall=False):
+def network_prediction(data_path, save_path, ckpt_path, args, ifsmall=False):
     casemodel = import_module('TfeNet')
-    config2, case_net = casemodel.get_model()
+    config2, case_net = casemodel.get_model(args)
     
     if ifsmall:
         assert 'small' in ckpt_path.lower(), "It seems the ckpt path is not for the small airways"
@@ -83,6 +83,8 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--folder', type=str, required=True, help="Folder path to the validation set")
     parser.add_argument('-df', '--destination_folder', type=str, required=True, help="Folder path to save the validation predictions")
     parser.add_argument('-m', '--model_ckpt', type=str, required=True, help="Path to the models checkpoints")
+    parser.add_argument('--dataset_path', default='/home/carolinakelsch/Documents/ThesisDatasets/TfeNet_preprocessed/Dataset016_AirRCFold0', type=str,
+					help='path to the dataset folder')
     parser.add_argument('-s', '--small', action='store_true', default=False, required=False, help="If the checkpoint is for the small airways")
 
     args = parser.parse_args()
@@ -93,7 +95,7 @@ if __name__ == '__main__':
     small_save_path = "./predict_result/pred_small"
     save_path = "./predict_result/pred"'''
     
-    network_prediction(args.folder, args.destination_folder, args.model_ckpt, ifsmall=args.small)
+    network_prediction(args.folder, args.destination_folder, args.model_ckpt, args, ifsmall=args.small)
     
 
 

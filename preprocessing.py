@@ -106,17 +106,21 @@ def get_cubic_bbox(mask, margin=5):
 	
 	if z_width < 128:
 		# check if image size is greather than 128
-		if mask.shape[0] >= 128:
-			z_center = (z1 + z2) // 2
-			z1 = max(0, z_center - 128 // 2)
-			z2 = min(mask.shape[0], z1 + 128)
-		else:
-			return None
+		z_center = (z1 + z2) // 2
+		if min(mask.shape[0], z_center + (128 // 2)) == mask.shape[0]:
+			z_center = mask.shape[0] - (128 // 2)
+		z1 = max(0, z_center - 128 // 2)
+		z2 = min(mask.shape[0], z1 + 128)
 
 	# Center the square crop
 	y_center = (y1 + y2) // 2
-	x_center = (x1 + x2) // 2
+	if min(mask.shape[1], y_center + (128 // 2)) == mask.shape[1]:
+		y_center = mask.shape[1] - (128 // 2)
 
+	x_center = (x1 + x2) // 2
+	if min(mask.shape[2], x_center + (128 // 2)) == mask.shape[2]:
+		x_center = mask.shape[2] - (128 // 2)
+	
 	new_y1 = max(0, y_center - max_side // 2)
 	new_y2 = min(mask.shape[1], new_y1 + max_side)
 
@@ -142,7 +146,9 @@ def clean_images(images_path):
 		lungmask_name = name + '_lungmask.nii.gz'
 
 		lungmask, origin, spacing  = load_itk_image(os.path.join(images_path.replace('image', 'lungmask'), lungmask_name))
-		
+		if min(lungmask.shape) < 128:
+			print("Image smaller than minimum cube!")
+			continue
 		bbox = get_cubic_bbox(lungmask)
 
 		if bbox is None:
@@ -158,7 +164,7 @@ def clean_images(images_path):
 			del lungmask # save space
 
 			# load image and crop
-			image, _, _ = load_itk_image(os.path.join(images_path, image_name))
+			image, _, _ = load_itk_image(os.path.join(images_path, image_name.split('/')[-1]))
 			cropped_image = image[z1:z2+1, y1:y2+1, x1:x2+1]
 			# perform HU windowing and intensities preprocessing
 			cropped_image[np.isnan(cropped_image)] = -2000

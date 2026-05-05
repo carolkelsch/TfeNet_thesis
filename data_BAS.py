@@ -429,8 +429,21 @@ def central_crop(sample, label, weight, crop_size):
 def random_sample(img, label, weight, crop_size):
 	origin_size = img.shape
 
-	start = [np.random.randint(0, origin_size[0] - crop_size[0]), np.random.randint(0, origin_size[1] - crop_size[1]),
-			np.random.randint(0, origin_size[2] - crop_size[2])]
+	'''start = [
+		np.random.randint(0, origin_size[0] - crop_size[0]),
+		np.random.randint(0, origin_size[1] - crop_size[1]),
+		np.random.randint(0, origin_size[2] - crop_size[2])
+	]'''
+
+	start = [
+		np.random.randint(0, max(1, origin_size[0] - crop_size[0])),
+		np.random.randint(0, max(1, origin_size[1] - crop_size[1])),
+		np.random.randint(0, max(1, origin_size[2] - crop_size[2]))
+	]
+
+	for i in range(3):
+		if origin_size[i] <= crop_size[i]:
+			start[i] = 0
 
 	img_crop = img[start[0]:(start[0] + crop_size[0]), start[1]:(start[1] + crop_size[1]),
 				start[2]:(start[2] + crop_size[2])]

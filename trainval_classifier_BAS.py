@@ -132,6 +132,92 @@ def train_casenet(epoch, model, data_loader, optimizer, args, save_dir):
 	empty_cache()
 	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision
 
+def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
+	"""
+	:param epoch: current epoch number
+	:param model: CNN model
+	:param data_loader: evaluation and testing data
+	:param args: global arguments args
+	:param save_dir: save directory
+	:param test_flag: current mode of validation or testing
+	:return: performance evaluation of the current epoch
+	"""
+	model.eval()
+	starttime = time.time()
+
+	loss_total = []
+	DSC_total = []
+	precision_total = []
+	accrancy_total = []
+	DSC_hard_total = []
+	sensitivity_total = []
+
+	if test_flag:
+		valdir = os.path.join(save_dir, 'test%03d'%(epoch))
+		state_str = 'test'
+	else:
+		valdir = os.path.join(save_dir, 'val%03d'%(epoch))
+		state_str = 'val'
+	if not os.path.exists(valdir):
+		os.mkdir(valdir)
+
+	with torch.no_grad():
+		for i, (x, y, weight, NameID) in enumerate(tqdm(data_loader)):
+			######Wrap Tensor##########
+			NameID = NameID[0]
+			batchlen = x.size(0)
+			if torch.cuda.is_available():
+				x = x.cuda()
+				y = y.cuda()
+			####################################################
+			casePred = model(x) # baseline
+
+			loss = general_union_loss(casePred, y, None, alpha=0.05)
+
+			# for evaluation
+			loss_total.append(loss.item())
+
+			# segmentation calculating metrics#######################
+			with torch.no_grad():
+				outdata = casePred.cpu().data.numpy()
+				segdata = y.cpu().data.numpy()
+
+				segdata = (segdata > th_bin)
+				segpred = (outdata > th_bin)
+
+				for j in range(batchlen):
+					dice = DSC_np(outdata[j, 0], segdata[j, 0])
+					dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
+					ppv = precision_np(segpred[j, 0], segdata[j, 0])
+					sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
+					acc = accrancy_np(segpred[j, 0], segdata[j, 0])
+
+					##########################################################################
+					DSC_total.append(dice)
+					precision_total.append(ppv)
+					sensitivity_total.append(sensiti)
+					accrancy_total.append(acc)
+					DSC_hard_total.append(dicehard)
+
+	endtime = time.time()
+	loss_total = np.array(loss_total)
+
+	mean_DSC = np.mean(np.array(DSC_total))
+	mean_DSC_hard = np.mean(np.array(DSC_hard_total))
+	mean_precision = np.mean(np.array(precision_total))
+	mean_sensitivity = np.mean(np.array(sensitivity_total))
+	mean_accrancy = np.mean(np.array(accrancy_total))
+	mean_loss = np.mean(loss_total)
+
+	print('%s, epoch %d, loss %.4f, accuracy %.4f, sensitivity %.4f, DSC %.4f, DSC hard %.4f, precision %.4f, time %3.2f'
+		  %(state_str, epoch, mean_loss, mean_accrancy, mean_sensitivity, mean_DSC,mean_DSC_hard, mean_precision, endtime-starttime))
+	print()
+
+	torch.cuda.empty_cache()
+	gc.collect()
+
+	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision
+
 def val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 	"""
 	:param epoch: current epoch number

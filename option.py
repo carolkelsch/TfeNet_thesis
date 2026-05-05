@@ -8,23 +8,23 @@ parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
 					help='number of data loading workers (default: 8)')
 parser.add_argument('--epochs', default=None, type=int, metavar='N',
 					help='number of total epochs to run')
-parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
+parser.add_argument('--start_epoch', default=1, type=int, metavar='N',
 					help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=1, type=int,
+parser.add_argument('-b', '--batch_size', default=1, type=int,
 					metavar='N', help='mini-batch size (default: 16)')
 parser.add_argument('--lr', '--learning-rate', default=None, type=float,
 					metavar='LR', help='initial learning rate')
-parser.add_argument('--save-freq', default='5', type=int, metavar='S',
+parser.add_argument('--save_freq', default='5', type=int, metavar='S',
 					help='save frequency')
-parser.add_argument('--val-freq', default='10', type=int, metavar='S',
+parser.add_argument('--val_freq', default='5', type=int, metavar='S',
 					help='validation frequency')
-parser.add_argument('--test-freq', default='10', type=int, metavar='S',
+parser.add_argument('--test_freq', default='10', type=int, metavar='S',
 					help='testing frequency')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
 					help='path to latest checkpoint (default: none)')
 parser.add_argument('--resumepart', default=0, type=int, metavar='PARTRESUME',
 					help='Resume params. part')
-parser.add_argument('--save-dir', default='', type=str, metavar='SAVE',
+parser.add_argument('--save_dir', default='', type=str, metavar='SAVE',
 					help='directory to save checkpoint (default: none)')
 parser.add_argument('--test', default=0, type=int, metavar='TEST',
 					help='1 do test evaluation, 0 not')

@@ -4,7 +4,7 @@ import numpy as np
 import data_CT_airways as data
 from importlib import import_module
 import shutil
-from trainval_classifier_BAS import train_casenet, val_casenet
+from trainval_classifier_BAS import train_casenet, my_val_casenet, val_casenet
 from utils import Logger, save_itk, weights_init
 import sys
 sys.path.append('../')
@@ -152,26 +152,26 @@ def main():
 	train_loader = DataLoader(
 		dataset_train,
 		batch_size=args.batch_size,
-		shuffle=True,
+		shuffle=False,
 		num_workers=args.workers,
 		pin_memory=True)
 	
 	print('--------------------------------------')
-	# split_comber = SplitComb(args.stridev, marginv)
+	split_comber = SplitComb(args.stridev, marginv)
 
-	# # load validation dataset
-	# dataset_val = data.AirwayData(
-	# 	config,
-	# 	phase='val',
-	# 	split_comber=split_comber,
-	# 	debug=args.debug,
-	# 	random_select=False)
-	# val_loader = DataLoader(
-	# 	dataset_val,
-	# 	batch_size=args.batch_size,
-	# 	shuffle=False,
-	# 	num_workers=args.workers,
-	# 	pin_memory=True)
+	# load validation dataset
+	dataset_val = data.AirwayData(
+		config,
+		phase='val',
+		split_comber=split_comber,
+		debug=args.debug,
+		random_select=False)
+	val_loader = DataLoader(
+		dataset_val,
+		batch_size=args.batch_size,
+		shuffle=False,
+		num_workers=args.workers,
+		pin_memory=True)
 
 	print('--------------------------------------')
 
@@ -207,6 +207,9 @@ def main():
 			csvout.close()
 
 	for epoch in range(start_epoch, end_epoch + 1):
+
+		train_loader.dataset.shuffle_dataset()
+		
 		# 更新大小气道的采样频率
 		t_loss, mean_accuracy, mean_sensitivity, mean_DSC, mean_precision = train_casenet(epoch, net, train_loader, optimizer, args, save_dir)
 		train_loss.append(t_loss)
@@ -240,8 +243,8 @@ def main():
 				'args': args},
 				os.path.join(save_dir, '%03d.ckpt' % epoch))
 
-		# if (epoch % args.val_freq == 0) or (epoch == start_epoch):
-		# 	v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = val_casenet(epoch, net, val_loader, args, save_dir)
+		if (epoch % args.val_freq == 0) or (epoch == start_epoch):
+			v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args, save_dir)
 
 		# if epoch % args.test_freq == 0:
 		# 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = val_casenet(epoch, net, test_loader, args, save_dir, test_flag=True)
