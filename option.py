@@ -18,6 +18,8 @@ parser.add_argument('--save_freq', default='5', type=int, metavar='S',
 					help='save frequency')
 parser.add_argument('--val_freq', default='5', type=int, metavar='S',
 					help='validation frequency')
+parser.add_argument('--early_stop', default=False, action='store_true',
+					help='If apply monitoring for early stop')
 parser.add_argument('--test_freq', default='10', type=int, metavar='S',
 					help='testing frequency')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',

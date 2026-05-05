@@ -1,5 +1,5 @@
 import os
-import time
+from time import time
 import numpy as np
 import data_CT_airways as data
 from importlib import import_module
@@ -19,12 +19,11 @@ import csv
 from option import parser
 import gc
 import warnings
+from local_logger import MyLocalLogger
 
 warnings.filterwarnings("ignore")
 
-def main():
-	global args
-	args = parser.parse_args()
+def main(args):
 	torch.manual_seed(0)
 	torch.cuda.set_device(args.device)
 	print('----------------------Load Model------------------------')
@@ -282,6 +281,301 @@ def main():
 	return
 
 
+class EarlyStopping():
+
+	def __init__(self, slope_window=15, early_stop_thresh=0.0005, early_stop_patience=30):
+		self.slope_window = slope_window
+		self.early_stop_thresh = early_stop_thresh
+		self.early_stop_patience = early_stop_patience
+
+	def check_slope(self, history, wait) -> tuple[bool, float, int]:
+
+		if len(history) < self.slope_window:
+			return False, 1, 0 # Keep training
+
+		# Get the last N points
+		y = np.array(history[-self.slope_window:])
+		# Create x-axis (0, 1, 2, 3, 4)
+		x = np.arange(self.slope_window)
+		
+		# Perform linear regression (degree 1 polynomial)
+		# polyfit returns [slope, intercept]
+		slope, _ = np.polyfit(x, y, 1)
+		
+		# For Loss: If slope is flatter than positive threshold
+		if slope is None:
+			return False, 1, 0 # Keep training
+		
+		if slope < self.early_stop_thresh:
+			wait += 1
+		else:
+			wait = 0 # Reset if we see a good upward trend
+
+		if wait >= self.early_stop_patience:
+			print(f"Early stopping triggered! Slope {slope:.6f} stayed below threshold for {self.early_stop_patience} epochs.")
+
+			return True, slope, wait
+		
+		return False, slope, wait
+
+
+def train_early_stop(args):
+	torch.manual_seed(0)
+	torch.cuda.set_device(args.device)
+	print('----------------------Load Model------------------------')
+	model = import_module(args.model)
+	config, net = model.get_model(args)
+	start_epoch = args.start_epoch
+	save_dir = args.save_dir
+	save_dir = os.path.join('results',save_dir)
+	print("savedir: ", save_dir)
+	print("args.lr: ", args.lr)
+	args.lr_stage = config['lr_stage']
+	args.lr_preset = config['lr']
+	os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
+
+	# early stop parameteres
+	prev_waiting_count = 0
+	min_epoch = 60
+	slope_window = 15
+
+	early_stopper = EarlyStopping(slope_window, 0.0005, 30)
+
+	if not os.path.exists(save_dir):
+		os.makedirs(save_dir)
+
+	my_logger = MyLocalLogger(save_dir, args.resume)
+
+	if args.resume:
+		resume_part = args.resumepart
+		checkpoint = torch.load(args.resume)
+
+		if resume_part:
+			"""
+			load part of the weight parameters
+			"""
+			net.load_state_dict(checkpoint['state_dict'], strict=False)
+			my_logger.load_checkpoint(checkpoint['logging'])
+			print('part load Done')
+		else:
+			"""
+			load full weight parameters
+			"""
+			net.load_state_dict(checkpoint['state_dict'])
+			my_logger.load_checkpoint(checkpoint['logging'])
+			print("full resume Done")
+		
+		start_epoch = len(my_logger.get_value('patience_waiting', step=None)) + 1
+		prev_waiting_count = my_logger.get_value('patience_waiting', step=-1)
+	else:
+		weights_init(net, init_type='xavier')  # weight initialization
+	
+	if args.epochs is None:
+		end_epoch = args.lr_stage[-1]
+	else:
+		end_epoch = args.epochs
+			
+	if torch.cuda.is_available() and args.multigpu != 1:
+		# net = torch.nn.DataParallel(net).cuda()
+		net = net.cuda()
+	cudnn.benchmark = True
+
+	if args.multigpu:
+		net = DataParallel(net).cuda()
+
+	if args.cubesizev is not None:
+		marginv = args.cubesizev
+	else:
+		marginv = args.cubesize
+	print('validation stride ', args.stridev)
+
+	if not args.sgd:
+		optimizer = optim.Adam(net.parameters(), lr=2e-2)  # args.lr
+		# optimizer = optim.AdamW(net.parameters(), lr=0.01)
+	else:
+		optimizer = optim.SGD(net.parameters(), lr=1e-2, momentum=0.9)
+
+	if args.test:
+		print('---------------------testing---------------------')
+		split_comber = SplitComb(args.stridev, marginv)
+		dataset_test = data.AirwayData(
+			config,
+			phase='test',
+			split_comber=split_comber,
+			debug=args.debug,
+			random_select=False,
+			small_airway=args.small_airways)
+		test_loader = DataLoader(
+			dataset_test,
+			batch_size=args.batch_size,
+			shuffle=False,
+			num_workers=args.workers,
+			pin_memory=True)
+		
+		print('start testing')
+		testdata = val_casenet(start_epoch-1, net, test_loader, args, save_dir, test_flag=True)
+		return
+
+	if args.debugval:
+		print ('---------------------validation---------------------')
+		split_comber = SplitComb(args.stridev, marginv)
+		dataset_val = data.AirwayData(
+			config,
+			phase='val',
+			split_comber=split_comber,
+			debug=args.debug,
+			random_select=False,
+			small_airway=args.small_airways)
+		val_loader = DataLoader(
+			dataset_val,
+			batch_size=args.batch_size,
+			shuffle=False,
+			num_workers=args.workers,
+			pin_memory=True)
+		valdata = val_casenet(start_epoch-1, net, val_loader, args, save_dir)
+		return
+
+	print('---------------------------------Load Dataset--------------------------------')
+	margin = args.cubesize
+	print('patch size ', margin)
+	print('train stride ', args.stridet)
+	split_comber = SplitComb(args.stridet, margin)
+
+	dataset_train = data.AirwayData(
+		config,
+		phase='train',
+		crop_size=args.cubesize,
+		split_comber=split_comber,
+		debug=args.debug,
+		random_select=args.randsel,
+		small_airway=args.small_airways)
+
+	train_loader = DataLoader(
+		dataset_train,
+		batch_size=args.batch_size,
+		shuffle=False,
+		num_workers=args.workers,
+		pin_memory=True)
+	
+	print('-------------------Load Validation-------------------')
+	split_comber = SplitComb(args.stridev, marginv)
+
+	# load validation dataset
+	dataset_val = data.AirwayData(
+		config,
+		phase='val',
+		split_comber=split_comber,
+		debug=args.debug,
+		random_select=False)
+	val_loader = DataLoader(
+		dataset_val,
+		batch_size=args.batch_size,
+		shuffle=False,
+		num_workers=args.workers,
+		pin_memory=True)
+
+	print('--------------------------------------')
+
+	##############################
+	# start training
+	##############################
+
+	v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = 0, 0, 0, 0, 0
+	# te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = 0, 0, 0, 0, 0
+	
+	stop = False
+	for epoch in range(start_epoch, end_epoch + 1):
+		
+		train_loader.dataset.shuffle_dataset()
+		
+		my_logger.log('epoch_start_timestamps', time(), epoch)
+		t_loss, mean_accuracy, mean_sensitivity, mean_DSC, mean_precision, lrs = train_casenet(epoch, net, train_loader, optimizer, args, save_dir)
+		my_logger.log('epoch_end_timestamps', time(), epoch)
+
+		if (epoch % args.val_freq == 0) or (epoch == start_epoch):
+			v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args, save_dir)
+
+		# if epoch % args.test_freq == 0:
+		# 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = val_casenet(epoch, net, test_loader, args, save_dir, test_flag=True)
+
+		# test_loss.append(te_loss)
+		# test_accuracy.append(mean_acc3)
+		# test_sensitivity.append(mean_sensiti3)
+		# test_DSC.append(mean_dice3)
+		# test_precision.append(mean_ppv3)
+		# 
+		# total_epoch.append(epoch)
+
+		my_logger.log('train_loss', t_loss, epoch)
+		my_logger.log('train_acc', mean_accuracy, epoch)
+		my_logger.log('train_sensitivity', mean_sensitivity, epoch)
+		my_logger.log('train_dice', mean_DSC, epoch)
+		my_logger.log('train_precision', mean_precision, epoch)
+		my_logger.log('val_loss', v_loss, epoch)
+		my_logger.log('val_acc', mean_acc2, epoch)
+		my_logger.log('val_sensitivity', mean_sensiti2, epoch)
+		my_logger.log('val_dice', mean_dice2, epoch)
+		my_logger.log('val_precision', mean_ppv2, epoch)
+		my_logger.log('lrs', lrs, epoch)
+
+		# treat early stop
+		if epoch > min_epoch:
+			stop, slope, prev_waiting_count = early_stopper.check_slope(my_logger.get_last_x_values('ema_val_dice', last=slope_window), prev_waiting_count) # if early stopping
+			my_logger.log('patience_waiting', prev_waiting_count, epoch)
+			print(f"Debug: Slope {slope:.6f} \t Patience count {prev_waiting_count}")
+            
+		else:
+			my_logger.log('patience_waiting', 0, epoch)
+		
+		my_logger.log('patience_waiting', prev_waiting_count, epoch)
+		
+		# Save the current model, default every 5 epoch/save
+		if epoch % args.save_freq == 0:
+			if args.multigpu:
+				state_dict = net.module.state_dict()
+			else:
+				state_dict = net.state_dict()
+			
+			for key in state_dict.keys():
+				state_dict[key] = state_dict[key].cpu()
+			
+			torch.save({
+				'state_dict': state_dict,
+				'args': args,
+				'logging': my_logger.get_checkpoint()},
+				os.path.join(save_dir, 'latest.ckpt'))
+			
+			my_logger.plot_progress_png(save_dir)
+		
+		# save final model
+		if epoch == end_epoch or stop:
+			if args.multigpu:
+				state_dict = net.module.state_dict()
+			else:
+				state_dict = net.state_dict()
+			
+			for key in state_dict.keys():
+				state_dict[key] = state_dict[key].cpu()
+			
+			torch.save({
+				'state_dict': state_dict,
+				'args': args,
+				'logging': my_logger.get_checkpoint()},
+				os.path.join(save_dir, 'final.ckpt'))
+
+		if stop:
+			break
+
+	print("Done")
+	return
+
+
 if __name__ == '__main__':
-	main()
+	global args
+	args = parser.parse_args()
+
+	if args.early_stop:
+		train_early_stop(args)
+	else:
+		main(args)
 

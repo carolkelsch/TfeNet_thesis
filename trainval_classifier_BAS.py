@@ -130,7 +130,7 @@ def train_casenet(epoch, model, data_loader, optimizer, args, save_dir):
 		  %(epoch, mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_DSC_hard, mean_precision, endtime-starttime,lr))
 	print ()
 	empty_cache()
-	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision
+	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision, lr
 
 def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 	"""
