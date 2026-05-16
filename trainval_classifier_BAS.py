@@ -12,6 +12,7 @@ import csv
 from scipy.ndimage.interpolation import zoom
 import gc
 import torch.nn as nn
+from loss import dice_loss
 
 
 th_bin = 0.5
@@ -85,7 +86,6 @@ def train_casenet(epoch, model, data_loader, optimizer, args, save_dir):
 		weight = 0.95*(weight**r) + 0.05
 		
 		loss = general_union_loss(casePred, y, weight, alpha=0.05) 
-		
 
 		optimizer.zero_grad()
 		loss.backward()
@@ -132,7 +132,7 @@ def train_casenet(epoch, model, data_loader, optimizer, args, save_dir):
 	empty_cache()
 	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision, lr
 
-def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
+def my_val_casenet(epoch, model, data_loader, args):
 	"""
 	:param epoch: current epoch number
 	:param model: CNN model
@@ -152,17 +152,8 @@ def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 	DSC_hard_total = []
 	sensitivity_total = []
 
-	if test_flag:
-		valdir = os.path.join(save_dir, 'test%03d'%(epoch))
-		state_str = 'test'
-	else:
-		valdir = os.path.join(save_dir, 'val%03d'%(epoch))
-		state_str = 'val'
-	if not os.path.exists(valdir):
-		os.mkdir(valdir)
-
 	with torch.no_grad():
-		for i, (x, y, weight, NameID) in enumerate(tqdm(data_loader)):
+		for i, (x, y, NameID) in enumerate(tqdm(data_loader)):
 			######Wrap Tensor##########
 			NameID = NameID[0]
 			batchlen = x.size(0)
@@ -178,26 +169,25 @@ def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 			loss_total.append(loss.item())
 
 			# segmentation calculating metrics#######################
-			with torch.no_grad():
-				outdata = casePred.cpu().data.numpy()
-				segdata = y.cpu().data.numpy()
+			outdata = casePred.cpu().data.numpy()
+			segdata = y.cpu().data.numpy()
 
-				segdata = (segdata > th_bin)
-				segpred = (outdata > th_bin)
+			segdata = (segdata > th_bin)
+			segpred = (outdata > th_bin)
 
-				for j in range(batchlen):
-					dice = DSC_np(outdata[j, 0], segdata[j, 0])
-					dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
-					ppv = precision_np(segpred[j, 0], segdata[j, 0])
-					sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
-					acc = accrancy_np(segpred[j, 0], segdata[j, 0])
+			for j in range(batchlen):
+				dice = DSC_np(outdata[j, 0], segdata[j, 0])
+				dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
+				ppv = precision_np(segpred[j, 0], segdata[j, 0])
+				sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
+				acc = accrancy_np(segpred[j, 0], segdata[j, 0])
 
-					##########################################################################
-					DSC_total.append(dice)
-					precision_total.append(ppv)
-					sensitivity_total.append(sensiti)
-					accrancy_total.append(acc)
-					DSC_hard_total.append(dicehard)
+				##########################################################################
+				DSC_total.append(dice)
+				precision_total.append(ppv)
+				sensitivity_total.append(sensiti)
+				accrancy_total.append(acc)
+				DSC_hard_total.append(dicehard)
 
 	endtime = time.time()
 	loss_total = np.array(loss_total)
@@ -209,8 +199,8 @@ def my_val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 	mean_accrancy = np.mean(np.array(accrancy_total))
 	mean_loss = np.mean(loss_total)
 
-	print('%s, epoch %d, loss %.4f, accuracy %.4f, sensitivity %.4f, DSC %.4f, DSC hard %.4f, precision %.4f, time %3.2f'
-		  %(state_str, epoch, mean_loss, mean_accrancy, mean_sensitivity, mean_DSC,mean_DSC_hard, mean_precision, endtime-starttime))
+	print('epoch %d, loss %.4f, accuracy %.4f, sensitivity %.4f, DSC %.4f, DSC hard %.4f, precision %.4f, time %3.2f'
+		  %(epoch, mean_loss, mean_accrancy, mean_sensitivity, mean_DSC,mean_DSC_hard, mean_precision, endtime-starttime))
 	print()
 
 	torch.cuda.empty_cache()
@@ -325,11 +315,11 @@ def val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
 		p_combine, porigin, pspacing = combine_total_avg(curp, sidelen, margin)
 		p_combine_bw = (p_combine > th_bin)
 		# curpath = os.path.join(valdir, '%s-case-org.nii.gz'%(curName))
-		curypath = os.path.join(valdir, '%s-case-gt.nii.gz'%(curName))
-		curpredpath = os.path.join(valdir, '%s-case-pred.nii.gz'%(curName))
+		'''curypath = os.path.join(valdir, '%s-case-gt.nii.gz'%(curName))
+		curpredpath = os.path.join(valdir, '%s-case-pred.nii.gz'%(curName))'''
 		# save_itk(x_combine.astype(dtype='uint8'), curorigin, curspacing, curpath)
-		save_itk(y_combine.astype(dtype='uint8'), curorigin, curspacing, curypath)
-		save_itk(p_combine_bw.astype(dtype='uint8'), curorigin, curspacing, curpredpath)
+		'''save_itk(y_combine.astype(dtype='uint8'), curorigin, curspacing, curypath)
+		save_itk(p_combine_bw.astype(dtype='uint8'), curorigin, curspacing, curpredpath)'''
 
 		########################################################################
 		curdicehard = DSC_np(p_combine_bw, y_combine)

@@ -449,8 +449,11 @@ def random_sample(img, label, weight, crop_size):
 				start[2]:(start[2] + crop_size[2])]
 	label_crop = label[start[0]:start[0] + crop_size[0], start[1]:start[1] + crop_size[1],
 					start[2]:start[2] + crop_size[2]]
-	weight_crop = weight[start[0]:start[0] + crop_size[0], start[1]:start[1] + crop_size[1],
-				start[2]:start[2] + crop_size[2]]
+	if weight is not None:
+		weight_crop = weight[start[0]:start[0] + crop_size[0], start[1]:start[1] + crop_size[1],
+					start[2]:start[2] + crop_size[2]]
+	else:
+		weight_crop = None
 
 	return img_crop, label_crop, weight_crop
 

@@ -4,7 +4,7 @@ import numpy as np
 import data_CT_airways as data
 from importlib import import_module
 import shutil
-from trainval_classifier_BAS import train_casenet, my_val_casenet, val_casenet
+from trainval_classifier_BAS import train_casenet, val_casenet, my_val_casenet
 from utils import Logger, save_itk, weights_init
 import sys
 sys.path.append('../')
@@ -20,6 +20,7 @@ from option import parser
 import gc
 import warnings
 from local_logger import MyLocalLogger
+from typing import Tuple, Union, List
 
 warnings.filterwarnings("ignore")
 
@@ -139,6 +140,8 @@ def main(args):
 	print('train stride ', args.stridet)
 	split_comber = SplitComb(args.stridet, margin)
 
+	print("Loading train data...")
+
 	dataset_train = data.AirwayData(
 		config,
 		phase='train',
@@ -156,13 +159,14 @@ def main(args):
 		pin_memory=True)
 	
 	print('--------------------------------------')
-	split_comber = SplitComb(args.stridev, marginv)
+	split_comber_val = SplitComb(args.stridev, marginv)
 
+	print("Loading val data...")
 	# load validation dataset
 	dataset_val = data.AirwayData(
 		config,
 		phase='val',
-		split_comber=split_comber,
+		split_comber=split_comber_val,
 		debug=args.debug,
 		random_select=False)
 	val_loader = DataLoader(
@@ -178,6 +182,8 @@ def main(args):
 	# start training
 	##############################
 	
+	print("Started training!")
+
 	total_epoch = []
 	train_loss,val_loss,test_loss = [],[],[]
 	train_accuracy,val_accuracy,test_accuracy = [],[],[]
@@ -243,7 +249,7 @@ def main(args):
 				os.path.join(save_dir, '%03d.ckpt' % epoch))
 
 		if (epoch % args.val_freq == 0) or (epoch == start_epoch):
-			v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args, save_dir)
+			v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = val_casenet(epoch, net, val_loader, args, save_dir)
 
 		# if epoch % args.test_freq == 0:
 		# 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = val_casenet(epoch, net, test_loader, args, save_dir, test_flag=True)
@@ -288,7 +294,7 @@ class EarlyStopping():
 		self.early_stop_thresh = early_stop_thresh
 		self.early_stop_patience = early_stop_patience
 
-	def check_slope(self, history, wait) -> tuple[bool, float, int]:
+	def check_slope(self, history, wait) -> Tuple[bool, float, int]:
 
 		if len(history) < self.slope_window:
 			return False, 1, 0 # Keep training
@@ -333,6 +339,7 @@ def train_early_stop(args):
 	args.lr_stage = config['lr_stage']
 	args.lr_preset = config['lr']
 	os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
+	print("Training with early stop!")
 
 	# early stop parameteres
 	prev_waiting_count = 0
@@ -397,11 +404,11 @@ def train_early_stop(args):
 
 	if args.test:
 		print('---------------------testing---------------------')
-		split_comber = SplitComb(args.stridev, marginv)
+		split_comber_tst = SplitComb(args.stridev, marginv)
 		dataset_test = data.AirwayData(
 			config,
 			phase='test',
-			split_comber=split_comber,
+			split_comber=split_comber_tst,
 			debug=args.debug,
 			random_select=False,
 			small_airway=args.small_airways)
@@ -441,6 +448,8 @@ def train_early_stop(args):
 	print('train stride ', args.stridet)
 	split_comber = SplitComb(args.stridet, margin)
 
+	print("Loading train data...")
+
 	dataset_train = data.AirwayData(
 		config,
 		phase='train',
@@ -458,15 +467,17 @@ def train_early_stop(args):
 		pin_memory=True)
 	
 	print('-------------------Load Validation-------------------')
-	split_comber = SplitComb(args.stridev, marginv)
+	split_comber_val = SplitComb(args.stridev, marginv)
+
+	print("Loading val data...")
 
 	# load validation dataset
 	dataset_val = data.AirwayData(
 		config,
 		phase='val',
-		split_comber=split_comber,
+		split_comber=split_comber_val,
 		debug=args.debug,
-		random_select=False)
+		random_select=args.randsel)
 	val_loader = DataLoader(
 		dataset_val,
 		batch_size=args.batch_size,
@@ -482,6 +493,8 @@ def train_early_stop(args):
 
 	v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = 0, 0, 0, 0, 0
 	# te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = 0, 0, 0, 0, 0
+
+	print("Started training...")
 	
 	stop = False
 	for epoch in range(start_epoch, end_epoch + 1):
@@ -492,8 +505,8 @@ def train_early_stop(args):
 		t_loss, mean_accuracy, mean_sensitivity, mean_DSC, mean_precision, lrs = train_casenet(epoch, net, train_loader, optimizer, args, save_dir)
 		my_logger.log('epoch_end_timestamps', time(), epoch)
 
-		if (epoch % args.val_freq == 0) or (epoch == start_epoch):
-			v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args, save_dir)
+		# if (epoch % args.val_freq == 0) or (epoch == start_epoch):
+		v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args)
 
 		# if epoch % args.test_freq == 0:
 		# 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = val_casenet(epoch, net, test_loader, args, save_dir, test_flag=True)

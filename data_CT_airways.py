@@ -128,14 +128,30 @@ class AirwayData(Dataset):
                    torch.from_numpy(label[None]).float(), \
                    torch.from_numpy(weight[None]).float(), data_name
 
+        else:
+            # Logic for Val/Test using same logic as training, randomly sampling data
+            item = self.cubelist[idx]
+            curNameID = item['name']
+            '''cursplit = item['split']     # Coordinates: [[z1, z2], [y1, y2], [x1, x2], idx]
+            curSplitID = item['id']
+            curnzhw = item['nzhw']
+            curShapeOrg = item['org']'''
+            file_idx = item['file_idx']  # We added this to know which file to load
 
-            '''self._update_buffer(file_idx) # Ensure image is in RAM
+            # Fetch the full volume from cache (or disk)
+            # Using the same cached function keeps Val fast!
+            data = self._load_case(curNameID, file_idx)
             
-            data = self.current_buffer[data_name]
-            
-            imgs, label, weight = data['imgs'].copy(), data['labels'].copy(), data['weight'].copy()
-            label = (label > 0).astype('float')
-            
+            '''# Slice the specific cube coordinates
+            # print(cursplit)
+            z, y, x, _ = cursplit
+            imgs = data['imgs'][z[0]:z[1], y[0]:y[1], x[0]:x[1]].astype(np.float32).copy()
+            label = (data['labels'][z[0]:z[1], y[0]:y[1], x[0]:x[1]] > 0).astype(np.float32).copy()'''
+
+            # IMMEDIATELY .copy() and convert back to float32 for processing
+            imgs = data['imgs'].astype(np.float32).copy()
+            label = (data['labels'] > 0).astype(np.float32).copy()
+
             # --- Robust Cropping to prevent "high <= 0" error ---
             # If image is smaller than target, we adjust sampling or pad
             target = [128, 128, 128]
@@ -143,49 +159,17 @@ class AirwayData(Dataset):
             # Note: You might need to add padding here if images < 128
             
             if any(imgs.shape[i] <= 145 for i in range(3)):
-                imgs, label, weight = random_sample(imgs, label, weight, target)
+                imgs, label, _ = random_sample(imgs, label, None, target)
             else:
-                imgs, label, weight = random_sample(imgs, label, weight, [145, 145, 145])
-
-            if self.augtype['rotate']:
-                imgs, label, weight = augment_random_rotate(imgs, label, weight, angle=10, threshold=0.7)
-                imgs, label, weight = central_crop(imgs, label, weight, self.crop_size)
-
-            imgs = (imgs.astype(np.float32)) / 255.0
-
-            imgs = imgs[np.newaxis, ...]
-            label = label[np.newaxis, ...]
-            weight = weight[np.newaxis, ...]
-
-            return torch.from_numpy(imgs).float(), torch.from_numpy(label).float(), \
-                   torch.from_numpy(weight).float(), data_name'''
-
-        else:
-            # Logic for Val/Test using cubelist
-            item = self.cubelist[idx]
-            curNameID = item['name']
-            cursplit = item['split']     # Coordinates: [[z1, z2], [y1, y2], [x1, x2]]
-            curSplitID = item['id']
-            curnzhw = item['nzhw']
-            curShapeOrg = item['org']
-            file_idx = item['file_idx']  # We added this to know which file to load
-
-            # Fetch the full volume from cache (or disk)
-            # Using the same cached function keeps Val fast!
-            data = self._load_case(curNameID, file_idx)
-            
-            # Slice the specific cube coordinates
-            z, y, x = cursplit
-            imgs = data['imgs'][z[0]:z[1], y[0]:y[1], x[0]:x[1]].astype(np.float32).copy()
-            label = (data['labels'][z[0]:z[1], y[0]:y[1], x[0]:x[1]] > 0).astype(np.float32).copy()
+                imgs, label, _ = random_sample(imgs, label, None, [145, 145, 145])
 
             # 4. Normalization (No random sampling/augmentation for Val)
             imgs = imgs / 255.0
             
             return torch.from_numpy(imgs[None]).float(), \
-               torch.from_numpy(label[None]).float(), \
-               torch.from_numpy(data['origin']), \
+               torch.from_numpy(label[None]).float(), curNameID # \
+'''torch.from_numpy(data['origin']), \
                torch.from_numpy(data['spacing']), \
                [curNameID], [curSplitID], \
                torch.from_numpy(np.array(curnzhw)), \
-               torch.from_numpy(np.array(curShapeOrg))
+               torch.from_numpy(np.array(curShapeOrg))'''
