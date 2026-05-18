@@ -353,6 +353,12 @@ def train_early_stop(args):
 
 	my_logger = MyLocalLogger(save_dir, args.resume)
 
+	if not args.sgd:
+		optimizer = optim.Adam(net.parameters(), lr=2e-2)  # args.lr
+		# optimizer = optim.AdamW(net.parameters(), lr=0.01)
+	else:
+		optimizer = optim.SGD(net.parameters(), lr=1e-2, momentum=0.9)
+
 	if args.resume:
 		resume_part = args.resumepart
 		checkpoint = torch.load(args.resume)
@@ -372,7 +378,14 @@ def train_early_stop(args):
 			my_logger.load_checkpoint(checkpoint['logging'])
 			print("full resume Done")
 		
+		if 'optimizer' in checkpoint:
+			optimizer.load_state_dict(checkpoint['optimizer'])
+			print("Optimizer state resumed")
+		else:
+			print("WARNING: No optimizer state found in checkpoint")
+		
 		start_epoch = len(my_logger.get_value('patience_waiting', step=None)) + 1
+		# start_epoch = checkpoint.get('epoch', 0) + 1
 		prev_waiting_count = my_logger.get_value('patience_waiting', step=-1)
 	else:
 		weights_init(net, init_type='xavier')  # weight initialization
@@ -396,11 +409,9 @@ def train_early_stop(args):
 		marginv = args.cubesize
 	print('validation stride ', args.stridev)
 
-	if not args.sgd:
-		optimizer = optim.Adam(net.parameters(), lr=2e-2)  # args.lr
-		# optimizer = optim.AdamW(net.parameters(), lr=0.01)
-	else:
-		optimizer = optim.SGD(net.parameters(), lr=1e-2, momentum=0.9)
+	
+	
+	
 
 	if args.test:
 		print('---------------------testing---------------------')
@@ -420,7 +431,7 @@ def train_early_stop(args):
 			pin_memory=True)
 		
 		print('start testing')
-		testdata = val_casenet(start_epoch-1, net, test_loader, args, save_dir, test_flag=True)
+		testdata = val_casenet(start_epoch, net, test_loader, args, save_dir, test_flag=True)
 		return
 
 	if args.debugval:
@@ -439,7 +450,7 @@ def train_early_stop(args):
 			shuffle=False,
 			num_workers=args.workers,
 			pin_memory=True)
-		valdata = val_casenet(start_epoch-1, net, val_loader, args, save_dir)
+		valdata = val_casenet(start_epoch, net, val_loader, args, save_dir)
 		return
 
 	print('---------------------------------Load Dataset--------------------------------')
@@ -497,7 +508,7 @@ def train_early_stop(args):
 	print("Started training...")
 	
 	stop = False
-	for epoch in range(start_epoch, end_epoch + 1):
+	for epoch in range(start_epoch, end_epoch):
 		
 		train_loader.dataset.shuffle_dataset()
 		
@@ -554,14 +565,16 @@ def train_early_stop(args):
 			
 			torch.save({
 				'state_dict': state_dict,
+				'optimizer': optimizer.state_dict(),
 				'args': args,
+				'epoch': epoch,
 				'logging': my_logger.get_checkpoint()},
 				os.path.join(save_dir, 'latest.ckpt'))
 			
 			my_logger.plot_progress_png(save_dir)
 		
 		# save final model
-		if epoch == end_epoch or stop:
+		if epoch == (end_epoch - 1) or stop:
 			if args.multigpu:
 				state_dict = net.module.state_dict()
 			else:
@@ -572,7 +585,9 @@ def train_early_stop(args):
 			
 			torch.save({
 				'state_dict': state_dict,
+				'optimizer': optimizer.state_dict(),
 				'args': args,
+				'epoch': epoch,
 				'logging': my_logger.get_checkpoint()},
 				os.path.join(save_dir, 'final.ckpt'))
 
