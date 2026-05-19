@@ -40,7 +40,7 @@ class AirwayData(Dataset):
         self.caseNumber = len(self.data_file_names)
 
         # For Val/Test, we still need the cubelist for splitting 3D volumes
-        self.cubelist = []
+        '''self.cubelist = []
         if self.phase != 'train':
             print(f"--- Preparing {self.phase} metadata ---")
             for i, file_name in enumerate(self.data_file_names):
@@ -50,7 +50,7 @@ class AirwayData(Dataset):
                 data_name = file_name.split('.nii')[0]
                 for j in range(len(splits)):
                     self.cubelist.append({'name': data_name, 'split': splits[j], 'id': j, 
-                                         'nzhw': nzhw, 'org': orgshape, 'file_idx': i})
+                                         'nzhw': nzhw, 'org': orgshape, 'file_idx': i})'''
     
     def shuffle_dataset(self):
         """
@@ -127,6 +127,33 @@ class AirwayData(Dataset):
             return torch.from_numpy(imgs[None]).float(), \
                    torch.from_numpy(label[None]).float(), \
                    torch.from_numpy(weight[None]).float(), data_name
+        
+        elif self.phase == 'val':
+            file_idx = idx // self.patch_per_case
+            data_name = self.data_file_names[file_idx].split('.nii')[0]
+            
+            # Fetch from cache
+            data = self._load_case(data_name, file_idx)
+            
+            # IMMEDIATELY .copy() and convert back to float32 for processing
+            imgs = data['imgs'].astype(np.float32).copy()
+            label = (data['labels'] > 0).astype(np.float32).copy()
+
+            # --- Robust Cropping to prevent "high <= 0" error ---
+            # If image is smaller than target, we adjust sampling or pad
+            target = [128, 128, 128]
+            # sample_size = [max(target[i], imgs.shape[i]) for i in range(3)] 
+            # Note: You might need to add padding here if images < 128
+            
+            if any(imgs.shape[i] <= 145 for i in range(3)):
+                imgs, label, weight = random_sample(imgs, label, weight, target)
+            else:
+                imgs, label, weight = random_sample(imgs, label, weight, [145, 145, 145])
+
+            imgs = (imgs.astype(np.float32)) / 255.0
+            
+            return torch.from_numpy(imgs[None]).float(), \
+                   torch.from_numpy(label[None]).float(), data_name
 
         else:
             # Logic for Val/Test using same logic as training, randomly sampling data

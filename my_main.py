@@ -479,7 +479,8 @@ def train_early_stop(args):
 	
 	print('-------------------Load Validation-------------------')
 	split_comber_val = SplitComb(args.stridev, marginv)
-
+	print('patch size ', marginv)
+	print('val stride ', args.stridev)
 	print("Loading val data...")
 
 	# load validation dataset

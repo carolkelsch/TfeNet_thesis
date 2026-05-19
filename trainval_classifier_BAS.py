@@ -202,10 +202,7 @@ def my_val_casenet(epoch, model, data_loader, args):
 	print('epoch %d, loss %.4f, accuracy %.4f, sensitivity %.4f, DSC %.4f, DSC hard %.4f, precision %.4f, time %3.2f'
 		  %(epoch, mean_loss, mean_accrancy, mean_sensitivity, mean_DSC,mean_DSC_hard, mean_precision, endtime-starttime))
 	print()
-
-	torch.cuda.empty_cache()
-	gc.collect()
-
+	empty_cache()
 	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision
 
 def val_casenet(epoch, model, data_loader, args, save_dir, test_flag=False):
