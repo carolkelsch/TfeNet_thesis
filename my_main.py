@@ -346,6 +346,8 @@ def train_early_stop(args):
 	min_epoch = 60
 	slope_window = 15
 
+	iterations_val = 1000
+
 	early_stopper = EarlyStopping(slope_window, 0.0005, 30)
 
 	if not os.path.exists(save_dir):
@@ -518,7 +520,7 @@ def train_early_stop(args):
 		my_logger.log('epoch_end_timestamps', time(), epoch)
 
 		# if (epoch % args.val_freq == 0) or (epoch == start_epoch):
-		v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args)
+		v_loss, mean_acc2, mean_sensiti2, mean_dice2, mean_ppv2 = my_val_casenet(epoch, net, val_loader, args, iterations_val)
 
 		# if epoch % args.test_freq == 0:
 		# 	te_loss, mean_acc3, mean_sensiti3, mean_dice3, mean_ppv3 = val_casenet(epoch, net, test_loader, args, save_dir, test_flag=True)

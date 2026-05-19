@@ -132,7 +132,7 @@ def train_casenet(epoch, model, data_loader, optimizer, args, save_dir):
 	empty_cache()
 	return mean_loss, mean_accrancy, mean_sensitivity, mean_DSC, mean_precision, lr
 
-def my_val_casenet(epoch, model, data_loader, args):
+def my_val_casenet(epoch, model, data_loader, args, iterations=None):
 	"""
 	:param epoch: current epoch number
 	:param model: CNN model
@@ -152,42 +152,94 @@ def my_val_casenet(epoch, model, data_loader, args):
 	DSC_hard_total = []
 	sensitivity_total = []
 
-	with torch.no_grad():
-		for i, (x, y, NameID) in enumerate(tqdm(data_loader)):
-			######Wrap Tensor##########
-			NameID = NameID[0]
-			batchlen = x.size(0)
-			if torch.cuda.is_available():
-				x = x.cuda()
-				y = y.cuda()
-			####################################################
-			casePred = model(x) # baseline
+	if iterations is None:
 
-			loss = general_union_loss(casePred, y, None, alpha=0.05)
+		with torch.no_grad():
+			for i, (x, y, org, spac, NameID, SplitID, nzhw, ShapeOrg) in enumerate(tqdm(data_loader)):
+				######Wrap Tensor##########
+				NameID = NameID[0]
+				batchlen = x.size(0)
+				if torch.cuda.is_available():
+					x = x.cuda()
+					y = y.cuda()
+				####################################################
+				casePred = model(x) # baseline
 
-			# for evaluation
-			loss_total.append(loss.item())
+				loss = general_union_loss(casePred, y, None, alpha=0.05)
 
-			# segmentation calculating metrics#######################
-			outdata = casePred.cpu().data.numpy()
-			segdata = y.cpu().data.numpy()
+				# for evaluation
+				loss_total.append(loss.item())
 
-			segdata = (segdata > th_bin)
-			segpred = (outdata > th_bin)
+				# segmentation calculating metrics#######################
+				outdata = casePred.cpu().data.numpy()
+				segdata = y.cpu().data.numpy()
 
-			for j in range(batchlen):
-				dice = DSC_np(outdata[j, 0], segdata[j, 0])
-				dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
-				ppv = precision_np(segpred[j, 0], segdata[j, 0])
-				sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
-				acc = accrancy_np(segpred[j, 0], segdata[j, 0])
+				segdata = (segdata > th_bin)
+				segpred = (outdata > th_bin)
 
-				##########################################################################
-				DSC_total.append(dice)
-				precision_total.append(ppv)
-				sensitivity_total.append(sensiti)
-				accrancy_total.append(acc)
-				DSC_hard_total.append(dicehard)
+				for j in range(batchlen):
+					dice = DSC_np(outdata[j, 0], segdata[j, 0])
+					dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
+					ppv = precision_np(segpred[j, 0], segdata[j, 0])
+					sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
+					acc = accrancy_np(segpred[j, 0], segdata[j, 0])
+
+					##########################################################################
+					DSC_total.append(dice)
+					precision_total.append(ppv)
+					sensitivity_total.append(sensiti)
+					accrancy_total.append(acc)
+					DSC_hard_total.append(dicehard)
+	else:
+		with torch.no_grad():
+			data_loader.dataset.shuffle_dataset()
+			loader_iter = iter(data_loader)
+
+			for i in tqdm(range(iterations)):
+				try:
+					# 3. Grab the next batch inside the loop
+					x, y, org, spac, NameID, SplitID, nzhw, ShapeOrg = next(loader_iter)
+				except StopIteration:
+					print(f"\n[Notice] Reached the end of the validation pool at step {i}.")
+					break # Safety check if dataset has fewer than 1000 patches
+				'''print(batch)
+				(x, y, NameID) = batch'''
+				######Wrap Tensor##########
+				NameID = NameID[0]
+				batchlen = x.size(0)
+				# print(f"Batch len: {batchlen}")
+				if torch.cuda.is_available():
+					x = x.cuda()
+					y = y.cuda()
+				####################################################
+				# print("CRITICAL CHECK - Shape of x:", x.shape)
+				casePred = model(x) # baseline
+
+				loss = general_union_loss(casePred, y, None, alpha=0.05)
+
+				# for evaluation
+				loss_total.append(loss.item())
+
+				# segmentation calculating metrics#######################
+				outdata = casePred.cpu().data.numpy()
+				segdata = y.cpu().data.numpy()
+
+				segdata = (segdata > th_bin)
+				segpred = (outdata > th_bin)
+
+				for j in range(batchlen):
+					dice = DSC_np(outdata[j, 0], segdata[j, 0])
+					dicehard = DSC_np(segpred[j, 0], segdata[j, 0])
+					ppv = precision_np(segpred[j, 0], segdata[j, 0])
+					sensiti = sensitivity_np(segpred[j, 0], segdata[j, 0])
+					acc = accrancy_np(segpred[j, 0], segdata[j, 0])
+
+					##########################################################################
+					DSC_total.append(dice)
+					precision_total.append(ppv)
+					sensitivity_total.append(sensiti)
+					accrancy_total.append(acc)
+					DSC_hard_total.append(dicehard)
 
 	endtime = time.time()
 	loss_total = np.array(loss_total)

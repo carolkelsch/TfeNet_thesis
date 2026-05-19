@@ -40,7 +40,8 @@ class AirwayData(Dataset):
         self.caseNumber = len(self.data_file_names)
 
         # For Val/Test, we still need the cubelist for splitting 3D volumes
-        '''self.cubelist = []
+        self.cubelist = []
+        
         if self.phase != 'train':
             print(f"--- Preparing {self.phase} metadata ---")
             for i, file_name in enumerate(self.data_file_names):
@@ -50,7 +51,8 @@ class AirwayData(Dataset):
                 data_name = file_name.split('.nii')[0]
                 for j in range(len(splits)):
                     self.cubelist.append({'name': data_name, 'split': splits[j], 'id': j, 
-                                         'nzhw': nzhw, 'org': orgshape, 'file_idx': i})'''
+                                         'nzhw': nzhw, 'org': orgshape, 'file_idx': i})
+        self.val_indices = list(range(len(self.cubelist)))
     
     def shuffle_dataset(self):
         """
@@ -59,6 +61,9 @@ class AirwayData(Dataset):
         """
         if self.phase == 'train':
             random.shuffle(self.data_file_names)
+        else:
+            # Reshuffle the pointer list so the 1000 patches are completely different this epoch
+            random.shuffle(self.val_indices)
 
     def __len__(self):
         return self.patch_per_case * self.caseNumber if self.phase == 'train' else len(self.cubelist)
@@ -71,6 +76,8 @@ class AirwayData(Dataset):
         then throws it away to make room for the next.
         """
         fname = self.data_file_names[file_idx]
+        if self.phase == "val":
+            fname = data_name + ".nii.gz"
         raw_path = os.path.join(self.base_path, fname)
         
         # Path logic (keep your existing logic here)
@@ -83,6 +90,7 @@ class AirwayData(Dataset):
 
         imgs, origin, spacing = load_itk_image(raw_path)
         labels, _, _ = load_itk_image(label_path)
+        assert imgs.shape == labels.shape, f"Image shape {imgs.shape} does not match label {labels.shape}"
         weight = np.load(weight_path) if self.phase == 'train' else None
         
         # We store as float16 in RAM to save 50% memory
@@ -113,10 +121,10 @@ class AirwayData(Dataset):
             # sample_size = [max(target[i], imgs.shape[i]) for i in range(3)] 
             # Note: You might need to add padding here if images < 128
             
-            if any(imgs.shape[i] <= 145 for i in range(3)):
-                imgs, label, weight = random_sample(imgs, label, weight, target)
-            else:
-                imgs, label, weight = random_sample(imgs, label, weight, [145, 145, 145])
+            # if any(imgs.shape[i] <= 145 for i in range(3)):
+            imgs, label, weight = random_sample(imgs, label, weight, target)
+            # else:
+            #     imgs, label, weight = random_sample(imgs, label, weight, [145, 145, 145])
 
             if self.augtype['rotate']:
                 imgs, label, weight = augment_random_rotate(imgs, label, weight, angle=10, threshold=0.7)
@@ -127,75 +135,56 @@ class AirwayData(Dataset):
             return torch.from_numpy(imgs[None]).float(), \
                    torch.from_numpy(label[None]).float(), \
                    torch.from_numpy(weight[None]).float(), data_name
-        
-        elif self.phase == 'val':
-            file_idx = idx // self.patch_per_case
-            data_name = self.data_file_names[file_idx].split('.nii')[0]
-            
-            # Fetch from cache
-            data = self._load_case(data_name, file_idx)
-            
-            # IMMEDIATELY .copy() and convert back to float32 for processing
-            imgs = data['imgs'].astype(np.float32).copy()
-            label = (data['labels'] > 0).astype(np.float32).copy()
-
-            # --- Robust Cropping to prevent "high <= 0" error ---
-            # If image is smaller than target, we adjust sampling or pad
-            target = [128, 128, 128]
-            # sample_size = [max(target[i], imgs.shape[i]) for i in range(3)] 
-            # Note: You might need to add padding here if images < 128
-            
-            if any(imgs.shape[i] <= 145 for i in range(3)):
-                imgs, label, weight = random_sample(imgs, label, weight, target)
-            else:
-                imgs, label, weight = random_sample(imgs, label, weight, [145, 145, 145])
-
-            imgs = (imgs.astype(np.float32)) / 255.0
-            
-            return torch.from_numpy(imgs[None]).float(), \
-                   torch.from_numpy(label[None]).float(), data_name
 
         else:
+
+            random_idx = self.val_indices[idx]
             # Logic for Val/Test using same logic as training, randomly sampling data
-            item = self.cubelist[idx]
+            item = self.cubelist[random_idx]
+            # print(f"item: {item}")
             curNameID = item['name']
-            '''cursplit = item['split']     # Coordinates: [[z1, z2], [y1, y2], [x1, x2], idx]
+            cursplit = item['split']     # Coordinates: [[z1, z2], [y1, y2], [x1, x2], idx]
             curSplitID = item['id']
             curnzhw = item['nzhw']
-            curShapeOrg = item['org']'''
+            curShapeOrg = item['org']
             file_idx = item['file_idx']  # We added this to know which file to load
 
             # Fetch the full volume from cache (or disk)
             # Using the same cached function keeps Val fast!
             data = self._load_case(curNameID, file_idx)
             
-            '''# Slice the specific cube coordinates
-            # print(cursplit)
+            # Slice the specific cube coordinates
+            # print(f"Slicing to {cursplit}")
             z, y, x, _ = cursplit
             imgs = data['imgs'][z[0]:z[1], y[0]:y[1], x[0]:x[1]].astype(np.float32).copy()
-            label = (data['labels'][z[0]:z[1], y[0]:y[1], x[0]:x[1]] > 0).astype(np.float32).copy()'''
-
-            # IMMEDIATELY .copy() and convert back to float32 for processing
-            imgs = data['imgs'].astype(np.float32).copy()
-            label = (data['labels'] > 0).astype(np.float32).copy()
+            label = (data['labels'][z[0]:z[1], y[0]:y[1], x[0]:x[1]] > 0).astype(np.float32).copy()
 
             # --- Robust Cropping to prevent "high <= 0" error ---
             # If image is smaller than target, we adjust sampling or pad
-            target = [128, 128, 128]
+            target = [128, 128, 128] # Images are already 128
             # sample_size = [max(target[i], imgs.shape[i]) for i in range(3)] 
             # Note: You might need to add padding here if images < 128
             
-            if any(imgs.shape[i] <= 145 for i in range(3)):
-                imgs, label, _ = random_sample(imgs, label, None, target)
-            else:
-                imgs, label, _ = random_sample(imgs, label, None, [145, 145, 145])
+            assert imgs.shape == tuple(target), f"Image shape {imgs.shape} does not match target {target}"
+            # if any(imgs.shape[i] <= 128 for i in range(3)):
+            # imgs, label, _ = random_sample(imgs, label, None, target)
+            # else:
+            #     imgs, label, _ = random_sample(imgs, label, None, [145, 145, 145])
 
             # 4. Normalization (No random sampling/augmentation for Val)
             imgs = imgs / 255.0
             
             return torch.from_numpy(imgs[None]).float(), \
+                torch.from_numpy(label[None]).float(), \
+                torch.from_numpy(data['origin']), \
+                torch.from_numpy(data['spacing']), \
+                [curNameID], [curSplitID], \
+                torch.from_numpy(np.array(curnzhw)), \
+                torch.from_numpy(np.array(curShapeOrg))
+
+'''return torch.from_numpy(imgs[None]).float(), \
                torch.from_numpy(label[None]).float(), curNameID # \
-'''torch.from_numpy(data['origin']), \
+torch.from_numpy(data['origin']), \
                torch.from_numpy(data['spacing']), \
                [curNameID], [curSplitID], \
                torch.from_numpy(np.array(curnzhw)), \

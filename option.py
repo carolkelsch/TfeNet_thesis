@@ -40,7 +40,7 @@ parser.add_argument('--sgd', default=0, type=int, metavar='SGDopti',
 					help='use sgd')
 parser.add_argument('--cubesize', default=[80, 192, 304], nargs="*", type=int, metavar='cube',
 					help='cube size')
-parser.add_argument('--cubesizev', default=None,nargs="*", type=int, metavar='cube',
+parser.add_argument('--cubesizev', default=None, nargs="*", type=int, metavar='cube',
 					help='cube size')
 parser.add_argument('--stridet', default=[48, 80, 80], nargs="*", type=int, metavar='stride',
 					help='split stride train')
