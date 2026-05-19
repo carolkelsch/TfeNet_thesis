@@ -386,7 +386,7 @@ def train_early_stop(args):
 		else:
 			print("WARNING: No optimizer state found in checkpoint")
 		
-		start_epoch = len(my_logger.get_value('patience_waiting', step=None)) + 1
+		start_epoch = len(my_logger.get_value('patience_waiting', step=None))
 		# start_epoch = checkpoint.get('epoch', 0) + 1
 		prev_waiting_count = my_logger.get_value('patience_waiting', step=-1)
 	else:
