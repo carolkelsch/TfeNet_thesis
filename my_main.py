@@ -411,9 +411,11 @@ def train_early_stop(args):
 		marginv = args.cubesize
 	print('validation stride ', args.stridev)
 
-	
-	
-	
+	target_device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+	for state in optimizer.state.values():
+		for k, v in state.items():
+			if isinstance(v, torch.Tensor):
+				state[k] = v.to(target_device)
 
 	if args.test:
 		print('---------------------testing---------------------')
